@@ -18,22 +18,23 @@ class BlockChain:
     
     def __init__(self):
         self.chain = []
-        self.transactions = [] #list containing all the transactions before they are mined into a block, basically works as a mempool
-        self.Create_Block(proof = 1, previous_hash = '0')
+        self.transactions = [] 
+        self.Create_Block(proof = 1, previous_hash = '0', merkle_root='0')
         self.nodes = set()
         
-    def Create_Block(self, proof, previous_hash):
+    def Create_Block(self, proof, previous_hash, merkle_root):
         block = {'index' : len(self.chain) + 1,
                  'timestamp' : str(datetime.datetime.now()),
                  'proof' : proof, 
                  'previous_hash' : previous_hash,
-                 'transactions' : self.transactions}
+                 'transactions' : self.transactions,
+                 'merkle_root': merkle_root}
         self.transactions = []
         self.chain.append(block)
         return block
     
     def get_previous_block(self):
-        return self.chain[-1] # for the last block of the blockchain
+        return self.chain[-1] 
     
     def proof_of_work(self, previous_proof):
         new_proof = 1
@@ -49,6 +50,10 @@ class BlockChain:
     def hash(self, block):
         encoded_block = json.dumps(block, sort_keys = True).encode()
         return hashlib.sha256(encoded_block).hexdigest()
+    
+    def transaction_hash(self, transaction):
+        encoded_transaction = json.dumps(transaction, sort_keys=True).encode()
+        return hashlib.sha256(encoded_transaction).hexdigest()
     
     def is_chain_valid(self, chain):
         previous_block = chain[0]
@@ -66,24 +71,29 @@ class BlockChain:
             block_index = block_index + 1
         return True
     
-    def add_transaction(self, identity): #sender, receiver, message):
-        #self.transactions.append({'sender' : sender,
-         #                         'receiver' : receiver,
-          #                        'message' : message})#format of our transactions
+    def merkle_root(self):
+        i=self.transactions
+        for trans in i:
+            new_mr = self.transaction_hash(trans)
+        return new_mr
+        
+    
+    def add_transaction(self, identity): 
+        identity = self.transaction_hash(identity)
         self.transactions.append({'identity' : identity})
-        previous_block = self.get_previous_block() #get the index of the last block
-        return previous_block['index'] + 1 #index of the block to which transactions will be added
+        previous_block = self.get_previous_block() 
+        return previous_block['index'] + 1
     
     def add_node(self, address):
-        parsed_url = urlparse(address) #function to parse the url of  the address node
-        self.nodes.add(parsed_url.netloc) #basically gives the url of the node which can be used as its unique identity eg - '127.0.0.1:5000'
+        parsed_url = urlparse(address) 
+        self.nodes.add(parsed_url.netloc) 
     
     def replace_chain(self):
-        network = self.nodes #network of the nodes that are in our blockchain all the nodes
-        longest_chain = None #it will contain our longest chain throughout the network which we will find out after iterating our network 
-        max_length = len(self.chain) # it will contain the max length of the chain and will be initialized by the length of the current chain we are dealing with
+        network = self.nodes 
+        longest_chain = None 
+        max_length = len(self.chain)
         for node in network:
-            response = requests.get(f'http://{node}/get_chain') #f here is the fstring functionformat which givver us whole http address of the node
+            response = requests.get(f'http://{node}/get_chain') 
             if response.status_code == 200:
                 length = response.json()['length']
                 chain = response.json()['chain']
@@ -103,9 +113,7 @@ class BlockChain:
 #creating a flask based web app
 app = Flask(__name__)
 
-#creating an address for the node on Post 5000
-#node_address = str(uuid4()).replace('-', '')
- #it is needed for getting mining fee from the block being mined as there will be a transaction from that block address to you
+
 
 #creating a blockchain
 blockchain = BlockChain()
@@ -118,15 +126,16 @@ def mine_block():
     previous_proof = previous_block['proof']
     proof = blockchain.proof_of_work(previous_proof)
     previous_hash = blockchain.hash(previous_block)
-    #blockchain.add_transaction(sender = node_address, receiver = 'HARLEQUIN', message = "Hello!!" )
     blockchain.add_transaction(identity= "ID")
-    block = blockchain.Create_Block(proof, previous_hash)
+    merkle_root=blockchain.merkle_root()
+    block = blockchain.Create_Block(proof, previous_hash, merkle_root)
     response = {'Message' : 'Congratulations, you just mined a block!', 
                 'index' : block['index'],
                 'timestamp' : block['timestamp'],
                 'proof' : block['proof'],
                 'previous_hash' : block['previous_hash'],
-                'transactions' : block['transactions']}
+                'transactions' : block['transactions'],
+                'merkle_root': block['merkle_root']}
     return jsonify(response), 200
 
 
@@ -134,8 +143,7 @@ def mine_block():
 @app.route('/get_chain', methods = ['GET'])
 def get_chain():
     response = {'chain' : blockchain.chain, 
-                'length' : len(blockchain.chain),
-                'transaction' : blockchain.transactions}
+                'length' : len(blockchain.chain)}
     return jsonify(response), 200
 
 
@@ -156,11 +164,9 @@ def is_valid():
 @app.route('/add_transaction', methods = ['POST'])
 def add_transaction():
     json = request.get_json()
-    #transaction_keys = ['sender', 'receiver', 'message']# update keys for using for authentication
     transaction_keys = ['identity']
     if not all(key in json for key in transaction_keys):
         return 'Houstein, we have a problem . It looks like Some elements are missing!!!', 400
-    #index = blockchain.add_transaction(json['sender'], json['receiver'], json['message'])
     index = blockchain.add_transaction(json['identity'])
     response = {'message' : f'This transaction will be added to Block {index}'}
     return jsonify(response), 201

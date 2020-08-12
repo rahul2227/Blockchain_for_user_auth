@@ -19,7 +19,7 @@ class BlockChain:
     def __init__(self):
         self.chain = []
         self.transactions = [] #list containing all the transactions before they are mined into a block, basically works as a mempool
-        self.Create_Block(proof = 1, previous_hash = '0')
+        self.Create_Block(proof = 1, previous_hash = '0', merkle_root='0')
         self.nodes = set()
         
     def Create_Block(self, proof, previous_hash, merkle_root):
@@ -53,7 +53,7 @@ class BlockChain:
     
     def transaction_hash(self, transaction):
         encoded_transaction = json.dumps(transaction, sort_keys=True).encode()
-        return hashlib.sha256(encoded_transaction).hecdigest()
+        return hashlib.sha256(encoded_transaction).hexdigest()
     
     def is_chain_valid(self, chain):
         previous_block = chain[0]
