@@ -6,10 +6,9 @@ import hashlib
 import json
 from flask import Flask, jsonify, request
 import requests
-#from uuid import uuid4
 from urllib.parse import urlparse
 import subprocess
-
+import urllib3
 
 #also required additional python module named as requests
 
@@ -20,11 +19,9 @@ class BlockChain:
     def __init__(self):
         self.chain = []
         self.transactions = [] #list containing all the transactions before they are mined into a block, basically works as a mempool
-        #self.Create_Block(proof = 1, previous_hash = '0', merkle_root='0')
         self.Create_Block(previous_hash = '0', merkle_root='0')
         self.nodes = set()
         
-    #def Create_Block(self, proof, previous_hash, merkle_root):
     def Create_Block(self, previous_hash, merkle_root):
         block = {'index' : len(self.chain) + 1,
                  'timestamp' : str(datetime.datetime.now()),
@@ -40,16 +37,6 @@ class BlockChain:
     def get_previous_block(self):
         return self.chain[-1] # for the last block of the blockchain
     
-    #def proof_of_work(self, previous_proof):
-        #new_proof = 1
-        #check_proof = False
-        #while check_proof is False:
-            #hash_operation = hashlib.sha256(str(new_proof**2 - previous_proof**2).encode()).hexdigest()
-            #if hash_operation[:4] == '0000':
-                #check_proof = True
-            #else:
-                #new_proof += 1
-        #return new_proof
     
     def hash(self, block):
         encoded_block = json.dumps(block, sort_keys = True).encode()
@@ -59,26 +46,11 @@ class BlockChain:
         encoded_transaction = json.dumps(transaction, sort_keys=True).encode()
         return hashlib.sha256(encoded_transaction).hexdigest()
     
-    #def is_chain_valid(self, chain):
-        #previous_block = chain[0]
-        #block_index = 1
-        #while block_index < len(chain):
-            #block = chain[block_index]
-            #if block['previous_hash'] != self.hash(previous_block):
-                #return False
-            #previous_proof = previous_block['proof']
-            #proof = block['proof']
-            #hash_operation = hashlib.sha256(str(proof**2 - previous_proof**2).encode()).hexdigest()
-            #if hash_operation[:4] != '0000':
-                #return False
-            #previous_block = block
-            #block_index = block_index + 1
-        #return True
     
     def consensus1(self, block):
         hs = self.hash(block)
         print(hs)
-        chaini = blockchain.chain
+        chaini = self.chain
         chaini_len = len(chaini)
         out = subprocess.getoutput('python3 G:\MyProjects\Blockchain_for_user_auth\Experiment\client.py http://127.0.0.1:5000 {0} {1}'.format(chaini_len, hs))
         print(out)
@@ -96,6 +68,9 @@ class BlockChain:
             return True
         else :
             return False
+        
+    #def validation_id(self, ):
+        
     
     
     def merkle_root(self):
@@ -105,12 +80,11 @@ class BlockChain:
         return new_mr
         
     
-    def add_transaction(self, identity): #sender, receiver, message):
-        #self.transactions.append({'sender' : sender,
-         #                         'receiver' : receiver,
-          #                        'message' : message})#format of our transactions
+    def add_transaction(self, identity, password):
         identity = self.transaction_hash(identity) # getting hash of each transaction
-        self.transactions.append({'identity' : identity})
+        password = self.transaction_hash(password)
+        self.transactions.append({'identity' : identity,
+                                  'password' : password})
         previous_block = self.get_previous_block() #get the index of the last block
         return previous_block['index'] + 1 #index of the block to which transactions will be added
     
@@ -143,9 +117,6 @@ class BlockChain:
 #creating a flask based web app
 app = Flask(__name__)
 
-#creating an address for the node on Post 5000
-#node_address = str(uuid4()).replace('-', '')
- #it is needed for getting mining fee from the block being mined as there will be a transaction from that block address to you
 
 #creating a blockchain
 blockchain = BlockChain()
@@ -155,15 +126,24 @@ blockchain = BlockChain()
 
 def mine_block():
     previous_block = blockchain.get_previous_block()
-    #previous_proof = previous_block['proof']
-    #proof = blockchain.proof_of_work(previous_proof)
     cons = blockchain.consensus1(previous_block)
     previous_hash = blockchain.hash(previous_block)
-    #blockchain.add_transaction(sender = node_address, receiver = 'HARLEQUIN', message = "Hello!!" )
-    blockchain.add_transaction(identity= "ID")
+    blockchain.add_transaction(identity= "ID", password="pass")
     merkle_root=blockchain.merkle_root()
-    #block = blockchain.Create_Block(proof, previous_hash, merkle_root)
     block = blockchain.Create_Block(previous_hash, merkle_root)
+    f = open("credentials.txt", "w")
+    chaini = blockchain.chain
+    chaini_len = len(chaini)
+    f.write("{0} \n {1} \n {2}".format(chaini_len, merkle_root, block['transactions']))
+    #weather = urllib3.response('{}'.format(block['transactions']))
+    #wjson = weather.read()
+    #wjdata = json.loads(wjson)
+    #print("this is data")
+    #print(wjdata)
+    #print(wjdata['transactions']['password'])
+    #wjdata = json.loads(block['transactions'])
+    #f.write("{0} \n {1} \n {2}".format(chaini_len, merkle_root, wjdata['transactions']['password']))
+    f.close()
     response = {'Message' : 'Congratulations, you just mined a block!', 
                 'index' : block['index'],
                 'timestamp' : block['timestamp'],
@@ -182,19 +162,8 @@ def get_chain():
     return jsonify(response), 200
 
 
-#checking the blockchain is valid
-
-#@app.route('/is_valid', methods = ['GET'])
-
-#def is_valid():
-    #is_valid = blockchain.is_chain_valid(blockchain.chain)
-    #if is_valid:
-        #response = {'message' : 'All good. The blockchain is valid.'}
-    #else:
-        #response = {'message' : 'My man we got a problem, blockchain is not valid here.'}
-    #return jsonify(response), 200
     
-#checking the blockchain is valid
+#checking the blockchain is in consensus
 
 @app.route('/is_consensus', methods = ['GET'])
 
@@ -215,11 +184,10 @@ def is_consensus():
 def add_transaction():
     json = request.get_json()
     #transaction_keys = ['sender', 'receiver', 'message']# update keys for using for authentication
-    transaction_keys = ['identity']
+    transaction_keys = ['identity', 'password']
     if not all(key in json for key in transaction_keys):
         return 'Houstein, we have a problem . It looks like Some elements are missing!!!', 400
-    #index = blockchain.add_transaction(json['sender'], json['receiver'], json['message'])
-    index = blockchain.add_transaction(json['identity'])
+    index = blockchain.add_transaction(json['identity'], json['password'])
     response = {'message' : f'This transaction will be added to Block {index}'}
     return jsonify(response), 201
 
